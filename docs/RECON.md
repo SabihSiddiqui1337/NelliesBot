@@ -79,3 +79,73 @@ separately-considered decision.
 have — winning a lot at a warehouse you can't drive to is a loss. Nellis also
 charges a buyer's premium (~15%) plus tax on top of the hammer price, so any
 "deal score" must compute landed cost, not hammer price.
+
+## Shopping location (Houston)
+
+Location is **session/cookie scoped**, not a URL parameter. Filter params on
+`/search` (`locationName`, `Location`, `refinementList[...]`) are all ignored.
+Browsing `/browse/TX/Houston` does *not* change it either. The only mechanism
+found:
+
+```
+POST /change-shopping-location
+Content-Type: application/x-www-form-urlencoded
+
+shoppingLocationId=5
+```
+
+The bot must hold a cookie jar, POST this once, then reuse the session for all
+subsequent `_data` reads.
+
+### Location IDs (probed 2026-09-08)
+
+| id | Shopping location | Warehouses | Open items |
+| -- | ----------------- | ---------- | ---------- |
+| 1 | Las Vegas, NV | North Las Vegas, Dean Martin, Legacy Bids, Nellis Outlet, Wild Finds Henderson, SW Las Vegas (+ estate events) | 64,795 |
+| 2 | Phoenix, AZ | Phoenix, Mesa | 34,980 |
+| **5** | **Houston, TX** | **SW Houston, Katy** | **32,792** |
+| 6 | Philadelphia, PA | Delran | 17,285 |
+| 7 | Denver, CO | Denver | 3,643 |
+| 8 | Dallas, TX | Dallas, Denton | 17,930 |
+
+IDs 3, 4, and 9+ are invalid and silently fall back to the previously set
+location — do not treat a 200 as proof the switch worked. **Always read back
+`currentShoppingLocation.id` from the next response and assert it.**
+
+`/browse/TX` (`_data=routes/browse.$state`) lists TX cities: Dallas, Denton,
+Houston, Katy.
+
+## Scale (Houston, 2026-09-08)
+
+- 32,792 open lots — SW Houston 17,007, Katy 15,785.
+- Tonight's events: `Daily Auction - SW Houston - Sep 7th` (16,811 lots) and
+  `Daily Auction - Katy - Sep 7th` (15,520). Note the event is named for the day
+  it *opened*, not the day it closes.
+- Algolia index `nellisauction-prd`, `hitsPerPage: 120`, `nbPages` capped at 250.
+- Server-side filter applied automatically:
+  `"Shopping Location":"<city>" AND "Market Status":"open" AND "Sensitive":0`
+  plus numeric `Time Remaining >= <unix now>`.
+
+### Distribution — why filtering must be aggressive
+
+`starRating` facet across Houston's open inventory:
+
+| Stars | Count | Share |
+| ----- | ----- | ----- |
+| 5 | 29,177 | 89% |
+| 4 | 2,317 | 7% |
+| 3 | 862 | 2.6% |
+| 2 | 360 | 1.1% |
+| 1 | 75 | 0.2% |
+
+**`starRating` is therefore a near-useless filter on its own** — 89% of lots are
+5-star. Condition screening must use the `grade` sub-fields
+(`functionalType`, `damageType`, `missingPartsType`, `conditionType`).
+
+`suggestedRetail` facet is heavily skewed to low-value goods (786 lots at $9.99
+retail; the bulk sits under $40). Most of the catalog can never clear the fee
+stack — a hard retail-price floor is the single highest-leverage filter.
+
+> TODO: sample several pages to get an exact retail-price percentile breakdown
+> and the close-time histogram in America/Chicago. Pagination appears to be
+> `?page=N` (0-indexed); confirm `algolia.page` echoes it back.
