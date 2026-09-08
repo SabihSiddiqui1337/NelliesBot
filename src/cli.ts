@@ -20,6 +20,34 @@ async function main(): Promise<void> {
       break;
     }
 
+    // Posts a single listing so a format change can be eyeballed in Discord
+    // without spamming the channel with twenty of them.
+    case 'demo': {
+      const client = new NellisClient();
+      const store = new Store(cfg.dbPath);
+      try {
+        const result = await scan(cfg, client, store);
+        const best = result.candidates[0];
+        if (!best) {
+          console.log('nothing cleared the filters — no demo to send');
+          break;
+        }
+        const hook = new DiscordWebhook(cfg.webhookUrl);
+        const confirmed = await hook.sendEmbeds(
+          [candidateEmbed(best)],
+          '**Format preview** — one listing only. Reply with what to change.',
+        );
+        console.log(
+          confirmed === 1
+            ? `sent demo: ${best.product.title}`
+            : `WARNING: Discord confirmed ${confirmed} embeds, expected 1`,
+        );
+      } finally {
+        store.close();
+      }
+      break;
+    }
+
     case 'scan':
     case 'digest': {
       const dryRun = command === 'scan';

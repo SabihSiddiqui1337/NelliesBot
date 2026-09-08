@@ -9,7 +9,9 @@ function relativeTime(d: Date): string {
 }
 
 function money(n: number): string {
-  return `$${n.toFixed(2)}`;
+  return n >= 1000
+    ? `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+    : `$${n.toFixed(n % 1 === 0 ? 0 : 2)}`;
 }
 
 export interface Embed {
@@ -23,62 +25,56 @@ export interface Embed {
 }
 
 /**
- * One lot as a Discord embed.
+ * One lot, laid out to be read in about two seconds.
  *
- * Deviates from the original sketch in three places, all deliberate:
- *  - "Online selling at" is labelled an *estimate*, because it is derived from
- *    Nellis's retail figure rather than measured FBMP comps.
- *  - No eBay-style fee line: FBMP local pickup takes no seller cut, so the
- *    sale price is the net. The 15% + tax applies on the BUY side only.
- *  - Max bid leads, because it is the only number that governs an action.
+ * Layout notes: the profit and the max bid are the only two numbers that drive
+ * a decision, so they go in the description as markdown headings — the only
+ * way to get large text inside a Discord embed. Everything else is a compact
+ * inline field. Discord packs inline fields three to a row, so the field count
+ * is kept to a multiple of three; an earlier version used full-width separator
+ * rows ("— Bid discipline —") which forced a tall vertical wall of text.
  */
 export function candidateEmbed(c: Candidate): Embed {
   const p = c.product;
   const e = c.economics;
   const flagged = c.condition.verdict === 'flag';
 
-  const fields = [
-    { name: 'Current bid', value: money(p.currentPrice), inline: true },
-    { name: 'Retail', value: money(p.retailPrice), inline: true },
-    { name: 'Bids', value: String(p.bidCount), inline: true },
-
-    { name: '\u200b', value: '**— Bid discipline —**', inline: false },
-    { name: 'MAX BID', value: `**${money(e.maxBid)}**`, inline: true },
-    { name: 'Out of pocket at max', value: money(e.maxBid * 1.244875), inline: true },
-    { name: 'Out of pocket now', value: money(e.landedAtCurrentBid), inline: true },
-
-    { name: '\u200b', value: '**— If it sells —**', inline: false },
-    { name: 'Est. FBMP price', value: `${money(c.resale.price)} *(est.)*`, inline: true },
-    { name: 'Profit at current bid', value: `**${money(e.profitAtCurrentBid)}**`, inline: true },
-    { name: 'Return on cost', value: `${e.roiAtCurrentBid.toFixed(2)}x`, inline: true },
-
-    { name: '\u200b', value: '**— Details —**', inline: false },
-    { name: 'Closes', value: relativeTime(c.closesAt), inline: true },
-    { name: 'Pickup', value: p.location?.name ?? 'unknown', inline: true },
-    {
-      name: 'Condition',
-      value: p.grade
-        ? `${p.grade.conditionType?.description ?? '?'} · damage ${p.grade.damageType?.description ?? '?'}`
-        : 'unknown',
-      inline: true,
-    },
+  const headline = [
+    `## 💰 ${money(e.profitAtCurrentBid)} profit  ·  ${e.roiAtCurrentBid.toFixed(1)}x`,
+    `### 🔨 Bid up to ${money(e.maxBid)}`,
+    `Currently **${money(p.currentPrice)}** · ${p.bidCount} bids · closes ${relativeTime(c.closesAt)}`,
   ];
 
   if (flagged) {
-    fields.push({
-      name: '⚠️ Needs your eyes',
-      value: `Flagged: ${c.condition.reasons.join(', ')}. Photos may still look fine — verify before bidding.`,
-      inline: false,
-    });
+    headline.push(`⚠️ **Check the photos** — ${c.condition.reasons.join(', ')}`);
   }
+
+  const condition = p.grade
+    ? `${p.grade.conditionType?.description ?? '?'}${
+        p.grade.damageType?.description && p.grade.damageType.description !== 'None'
+          ? ` · ${p.grade.damageType.description.toLowerCase()} damage`
+          : ''
+      }`
+    : 'unknown';
 
   const embed: Embed = {
     title: p.title.slice(0, 250),
     url: c.url,
     color: flagged ? AMBER : GREEN,
-    fields,
+    description: headline.join('\n'),
+    fields: [
+      { name: 'You pay', value: money(e.landedAtCurrentBid), inline: true },
+      { name: 'Sells for ~', value: money(c.resale.price), inline: true },
+      { name: 'Retail', value: money(p.retailPrice), inline: true },
+
+      { name: 'Condition', value: condition, inline: true },
+      { name: 'Pickup', value: p.location?.name ?? '?', inline: true },
+      { name: 'Confidence', value: `${(c.resale.confidence * 100).toFixed(0)}%`, inline: true },
+    ],
     footer: {
-      text: `confidence ${(c.resale.confidence * 100).toFixed(0)}% · demand ${(c.demandScore * 100).toFixed(0)}% · ${c.resale.basis}`.slice(0, 2040),
+      text: c.liquidityNotes.length
+        ? `⚠︎ ${c.liquidityNotes.join(' · ')}`
+        : 'resale figure is an estimate from retail, not a measured comp',
     },
   };
 
@@ -95,9 +91,9 @@ export function digestHeader(counts: {
   flagged: number;
 }): string {
   return [
-    `## 🔨 Nellis Houston — daily shortlist`,
-    `Scanned **${counts.scanned.toLocaleString()}** lots · **${counts.candidates}** cleared the filters · showing top **${counts.shown}**` +
-      (counts.flagged ? ` · **${counts.flagged}** flagged for manual check` : ''),
-    `_Prices are as of now. Nearly all bidding happens in the last minutes before close, so treat this as a watchlist, not a buy list._`,
+    `## 🔨 Nellis Houston — tonight's shortlist`,
+    `**${counts.scanned.toLocaleString()}** lots scanned · **${counts.candidates}** passed · top **${counts.shown}**` +
+      (counts.flagged ? ` · ⚠️ **${counts.flagged}** need a photo check` : ''),
+    `_Most bidding happens in the last minutes, so these prices will move. Treat it as a watchlist._`,
   ].join('\n');
 }
