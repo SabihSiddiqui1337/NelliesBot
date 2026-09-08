@@ -3,6 +3,7 @@ import { NellisClient } from './nellis/client.ts';
 import { Store } from './store/db.ts';
 import { DiscordWebhook } from './discord/webhook.ts';
 import { candidateEmbed, digestHeader } from './discord/format.ts';
+import { VARIANTS } from './discord/variants.ts';
 import { scan } from './jobs/digest.ts';
 
 const command = process.argv[2] ?? 'scan';
@@ -33,14 +34,22 @@ async function main(): Promise<void> {
           break;
         }
         const hook = new DiscordWebhook(cfg.webhookUrl);
+        // `demo variants` posts the same lot in every candidate layout so one
+        // can be chosen by eye; plain `demo` posts the current format.
+        const showAll = process.argv[3] === 'variants';
+        const embeds = showAll
+          ? Object.values(VARIANTS).map((f) => f(best))
+          : [candidateEmbed(best)];
         const confirmed = await hook.sendEmbeds(
-          [candidateEmbed(best)],
-          '**Format preview** — one listing only. Reply with what to change.',
+          embeds,
+          showAll
+            ? '**Same listing, three layouts.** Reply with A, B or C — or say what to change.'
+            : '**Format preview** — one listing only.',
         );
         console.log(
-          confirmed === 1
-            ? `sent demo: ${best.product.title}`
-            : `WARNING: Discord confirmed ${confirmed} embeds, expected 1`,
+          confirmed === embeds.length
+            ? `sent ${embeds.length} demo embed(s): ${best.product.title}`
+            : `WARNING: Discord confirmed ${confirmed}/${embeds.length} embeds`,
         );
       } finally {
         store.close();
