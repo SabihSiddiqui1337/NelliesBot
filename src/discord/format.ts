@@ -1,5 +1,8 @@
 import type { Candidate } from '../scoring/score.ts';
-import { landedMultiplier } from '../economics/cost.ts';
+import { HOUSTON_FBMP } from '../economics/cost.ts';
+
+/** Written as a constant because a literal escape is easy to mangle in edits. */
+const NEWLINE = String.fromCharCode(10);
 
 const GREEN = 0x2ecc71;
 const AMBER = 0xf1c40f;
@@ -48,20 +51,10 @@ export function candidateEmbed(c: Candidate): Embed {
   const e = c.economics;
   const flagged = c.condition.verdict === 'flag';
 
-  // All-in at the cap is the number that matters: the premium and tax are
-  // folded straight into it rather than itemised. An earlier version drew a
-  // two-column monospace ledger showing the current bid's full cost too, but
-  // Discord does not hold column alignment on mobile, and the cost of a price
-  // that still has hours of bidding left to move is not worth a line.
-  const allInAtMax = e.maxBid * landedMultiplier();
-
   const headline = [
     `## 💰 ${money(e.profitAtCurrentBid)} profit  ·  ${e.roiAtCurrentBid.toFixed(1)}x`,
     `### 🔨 Bid up to ${money(e.maxBid)}`,
-    `All-in **${money(allInAtMax)}** at that bid — includes the 15% premium and tax`,
-    '',
-    `Now **${money(p.currentPrice)}** · ${p.bidCount} bids`,
-    `Closes ${relativeTime(c.closesAt)} · ${clockTime(c.closesAt)}`,
+    `Now **${money(p.currentPrice)}** · ${p.bidCount} bids · closes ${relativeTime(c.closesAt)} (${clockTime(c.closesAt)})`,
   ];
 
   if (flagged) {
@@ -95,10 +88,61 @@ export function candidateEmbed(c: Candidate): Embed {
     },
   };
 
+  embed.fields.push({
+    name: `If you win at ${money(e.maxBid)}`,
+    value: costLadder(e.maxBid, c.resale.price),
+    inline: false,
+  });
+
   const photo = p.photos?.[0]?.url;
   if (photo) embed.thumbnail = { url: photo };
 
   return embed;
+}
+
+/**
+ * Single-column cost ladder for the max bid.
+ *
+ * Deliberately narrow — 24 characters — because Discord shrinks or wraps a
+ * code block that overflows a phone screen, and this is read on a phone. An
+ * earlier two-column version showing the current bid's cost alongside broke
+ * on mobile for exactly that reason, and the second column was not worth
+ * having anyway: with hours of bidding left, what the lot costs right now
+ * tells you nothing.
+ *
+ * Components are rounded to cents before the total is summed, so the column
+ * always adds up on screen.
+ */
+function costLadder(maxBid: number, salePrice: number): string {
+  const { buyersPremiumRate, salesTaxRate, handlingCost } = HOUSTON_FBMP;
+  const cents = (n: number) => Math.round(n * 100) / 100;
+
+  const hammer = cents(maxBid);
+  const premium = cents(hammer * buyersPremiumRate);
+  const tax = cents((hammer + premium) * salesTaxRate);
+  const youPay = cents(hammer + premium + tax);
+  const profit = cents(salePrice - youPay - handlingCost);
+
+  const LABEL = 14;
+  const NUM = 10;
+  const row = (l: string, n: number, sign = '') =>
+    l.padEnd(LABEL) + `${sign}$${Math.abs(n).toFixed(2)}`.padStart(NUM);
+  const rule = '-'.repeat(LABEL + NUM);
+
+  return [
+    '```',
+    row('Your bid', hammer),
+    row(`+ premium 15%`, premium),
+    row(`+ tax 8.25%`, tax),
+    rule,
+    row('YOU PAY', youPay),
+    '',
+    row('Sells for ~', salePrice),
+    row('- handling', handlingCost, '-'),
+    rule,
+    row('PROFIT', profit),
+    '```',
+  ].join(NEWLINE);
 }
 
 export function digestHeader(counts: {
