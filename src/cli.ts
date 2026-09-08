@@ -51,7 +51,7 @@ async function main(): Promise<void> {
           );
         } else {
           const hook = new DiscordWebhook(cfg.webhookUrl);
-          await hook.sendEmbeds(
+          const confirmed = await hook.sendEmbeds(
             top.map(candidateEmbed),
             digestHeader({
               scanned: result.scanned,
@@ -60,7 +60,16 @@ async function main(): Promise<void> {
               flagged,
             }),
           );
-          console.log(`posted ${top.length} embeds to Discord`);
+          // Discord can accept a webhook call and still deliver nothing, so
+          // trust the echoed message rather than the HTTP status.
+          if (confirmed < top.length) {
+            console.warn(
+              `WARNING: sent ${top.length} embeds but Discord confirmed only ${confirmed}`,
+            );
+            process.exitCode = 1;
+          } else {
+            console.log(`Discord confirmed ${confirmed}/${top.length} embeds delivered`);
+          }
         }
       } finally {
         store.close();
