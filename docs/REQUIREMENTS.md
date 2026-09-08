@@ -18,6 +18,9 @@ low bid**, in the Houston market, and push them to Discord.
 | Output | Discord notification (webhook; Sabih owns the server) |
 | Cadence | Morning digest — "items posted for that day" |
 | Volume | Top 20, ranked by profit margin |
+| Resale channel | **Facebook Marketplace** (local) |
+| Budget | **~$50/month** all-in, including data and hosting |
+| Bidding | **Alerts only.** Automated bidding is explicitly out of scope for now |
 
 ## Required signals
 
@@ -56,11 +59,18 @@ Profit:
   A morning `currentPrice` is near-meaningless — nearly all price formation
   happens in the final minutes. A morning digest is a *watchlist*, not a
   decision. Likely needs a second pass near close. **Needs a decision.**
-- **Demand data source.** eBay sold comps vs Keepa (Amazon sales rank) vs
-  heuristics. Cost/accuracy tradeoff. Most lot photos are hosted on
+- **Demand data source.** Keepa (Amazon sales rank) vs eBay Browse API vs
+  heuristics, inside the $50/mo budget. Most lot photos are hosted on
   `m.media-amazon.com`, which suggests Amazon-sourced items and favours Keepa.
-- **Resale fees.** The draft format computes profit from gross sale price. Real
-  net must subtract marketplace fees (~13% on eBay) and shipping, or the profit
-  figure is fiction.
+- **Resale fees are now near-zero.** Facebook Marketplace charges no seller fee
+  on local pickup sales, which materially improves margins versus eBay's ~13%.
+  The cost model is therefore buy-side only: hammer + 15% premium + sales tax,
+  against a local cash sale price.
+- **FBMP changes what to source.** Local pickup means bulky, heavy items
+  (furniture, appliances, exercise equipment) are an *advantage* rather than a
+  shipping liability — and they are exactly what other resellers skip, so they
+  go cheap. Worth weighting toward, not filtering out.
+- **FBMP has no comps API.** Amazon/eBay data can establish demand and a retail
+  anchor, but the realisable local price must be derived from them, not copied.
 - **Funnel cost.** ~32k open lots; per-item demand lookups cannot run on all of
   them. Needs cheap filters first, expensive lookups only on finalists.

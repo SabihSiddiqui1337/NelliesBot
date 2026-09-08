@@ -149,3 +149,72 @@ stack — a hard retail-price floor is the single highest-leverage filter.
 > TODO: sample several pages to get an exact retail-price percentile breakdown
 > and the close-time histogram in America/Chicago. Pagination appears to be
 > `?page=N` (0-indexed); confirm `algolia.page` echoes it back.
+
+## Pagination and filtering
+
+**`?page=N` does nothing.** It returns HTTP 200 with the same first 120 items,
+and `algolia.page` stays `0` — a silent no-op that looks like it worked. Same
+for `p`, `pageNumber`, `pg`, `offset`, `from`, `start`, `currentPage`. Anything
+built on those will happily scrape page 1 forty times and report success.
+
+The real parameter, taken from the site's own "Go to next page" link:
+
+```
+/search?query=&_p1=s:120,n:1     (url-encoded: _p1=s%3A120%2Cn%3A1)
+```
+
+- `n` = 0-indexed page number; echoed back as `algolia.page`.
+- `s` = size of the accumulated window, i.e. how many items are returned.
+
+It is **cumulative, not offset-based**: `s:240,n:2` returns 240 items, `s:360,n:3`
+returns 360. Later pages re-send everything before them, so naive paging
+re-downloads the whole prefix each time — O(n²) bytes. `s:480,n:4` returned 0
+items, so there is a ceiling somewhere around 360-480; find it before relying on
+deep paging.
+
+**Implication:** do not try to walk all ~32.8k Houston lots page by page.
+Partition with facet filters and page shallowly within each slice.
+
+### Facet filter params
+
+Plain query-string, human-readable facet names:
+
+```
+/search?query=&Taxonomy+Level+1=Electronics
+/search?query=&Brand=VEVOR
+```
+
+Known facet keys returned in `facets`: `locationName`, `auctionEventName`,
+`auctionEventType`, `starRating`, `suggestedRetail`, `taxonomy1`, `taxonomy2`,
+`brand`, `color`, `size`.
+
+Taxonomy Level 1 values: Home & Household Essentials, Beauty & Personal Care,
+Electronics, Automotive, Home Improvement, Clothing/Shoes & Accessories,
+Outdoors & Sports, Furniture & Appliances, Pet Supplies, Patio & Garden, Baby,
+Toys & Games, Office & School Supplies, Books/Music & Media,
+Food/Supplements & Pantry, Bulk and Mixed Items, Smart Home.
+
+> TODO: confirm the param name for `locationName` (to split SW Houston vs Katy)
+> and for a `suggestedRetail` numeric range, which is the highest-value filter.
+
+## Close-time window (Houston, confirmed)
+
+Sample of 120 closing lots, `America/Chicago`:
+
+| Hour CT | Lots |
+| ------- | ---- |
+| 6 PM | 42 |
+| 7 PM | 33 |
+| 8 PM | 28 |
+| 9 PM | 17 |
+
+Matches the stated 6-10 PM window.
+
+**Caution on sampling:** the default result order is not random and skews to
+high-retail items (that 120-lot sample had a median suggested retail of $448 and
+75% above $250, while the whole-catalog `suggestedRetail` facet skews far
+cheaper). Never infer catalog-wide statistics from page 1.
+
+Condition values observed: `conditionType` in {New, Used}; `damageType` in
+{None, Minor, Major}. In that sample, 6/120 were non-functional and 10/120 had
+missing parts.
