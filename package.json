@@ -1,0 +1,21 @@
+{
+  "name": "nelliesbot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Finds resale-worthy Nellis Auction lots in Houston and alerts Discord.",
+  "engines": { "node": ">=22.5.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types test/**/*.test.ts",
+    "scan": "node --env-file=.env --experimental-strip-types src/cli.ts scan",
+    "digest": "node --env-file=.env --experimental-strip-types src/cli.ts digest",
+    "settle": "node --env-file=.env --experimental-strip-types src/cli.ts settle",
+    "ping": "node --env-file=.env --experimental-strip-types src/cli.ts ping"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  }
+}

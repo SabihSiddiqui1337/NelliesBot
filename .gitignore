@@ -14,6 +14,15 @@ Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+# --- Local data ---
+# SQLite price history. Machine-local and regenerable; keeping it out of git
+# avoids a large binary diff on every scan. It does NOT transfer between
+# machines — each clone rebuilds its own history.
+data/
+*.db
+*.db-wal
+*.db-shm
+
 # --- Logs / temp ------------------------------------------------------------
 logs/
 *.log
